@@ -1,350 +1,253 @@
-<!DOCTYPE html>
-<html lang="es">
+<!doctype html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Matching con sonidos y SRS</title>
-<style>
-  body { font-family: Arial, sans-serif; padding: 20px; background: #f4f4f4;}
-  h1 { text-align: center; }
-  .top-buttons, .bottom-buttons {
-    text-align:center;
-    margin-top: 20px;
-  }
-  .container { display: flex; gap: 40px; justify-content: center; margin-top:20px; }
-  .column { display: flex; flex-direction: column; gap: 10px; }
-  .item {
-    padding: 8px 12px; background: white; border: 1px solid #ccc; cursor: pointer;
-    border-radius: 8px; width: 200px; text-align: center;
-    transition: background 0.3s, transform 0.2s;
-  }
-  .item:hover { background: #eaeaea; transform: scale(1.02); }
-  .correct { background: #c8f7c5 !important; cursor: default !important; }
-  .wrong { background: #f7c5c5 !important; }
-  .selected { background: #d0e7ff !important; }
-  #helpBtnTop, #helpBtn, #backBtn, #resetBtn, #clearHistoryBtn { padding: 10px 20px; display:none;}
-  #setup { max-width: 700px; margin: auto; }
-  textarea { width: 100%; height: 180px; margin-bottom: 10px; }
-  button { padding: 10px 20px; margin-right:10px;}
-  .infoBox {
-    max-width: 600px; margin: 20px auto; padding: 15px;
-    background: #fff8d5; border: 1px solid #ccc; border-radius: 10px;
-    display:none; font-size: 1.1em; line-height: 1.4em;
-  }
-  .memory-controls { text-align:center; margin-top:10px; }
-  .memory-controls textarea {
-    width: 95%;
-    height: 60px;
-    margin-top: 10px;
-    display: none;
-  }
-  .difficulty-buttons {
-    margin-top: 10px;
-    text-align: center;
-  }
-  .difficulty-buttons button {
-    padding: 8px 16px;
-    margin: 5px;
-  }
-</style>
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Prepositions Quiz Board</title>
+  <style>
+    :root{--card-bg:#fff;--card-border:#e2e8f0;--accent:#2563eb}
+    body{font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:#f8fafc; margin:0; padding:20px; color:#0f172a}
+    header{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+    h1{font-size:18px;margin:0}
+    .controls{margin-left:auto;display:flex;gap:8px;align-items:center}
+    .btn{background:#fff;border:1px solid var(--card-border);padding:8px 10px;border-radius:8px;cursor:pointer}
+    .btn.primary{background:var(--accent);color:#fff;border-color:transparent}
+    .btn.ghost{background:transparent}
+    .selector{display:flex;gap:6px}
+    .stats{font-size:14px;color:#475569}
+
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+    .card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:12px;padding:12px;box-shadow:0 1px 2px rgba(2,6,23,0.03)}
+    .situation{font-weight:600;margin-bottom:10px}
+    .controls-row{display:flex;gap:8px;flex-wrap:wrap}
+    textarea.answer{width:100%;min-height:56px;border:1px solid #e6eef8;padding:8px;border-radius:8px;margin-top:8px;resize:vertical}
+    .options{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+    .option-btn{padding:8px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;text-align:left;cursor:pointer}
+    .option-btn.correct{border-color:green}
+    .option-btn.wrong{border-color:#ef4444}
+    .feedback{margin-top:10px;font-size:14px}
+    .explain{margin-top:6px;padding:8px;background:#f1f5f9;border-radius:8px;border:1px solid #e2e8f0}
+    .ipa{font-family:monospace;margin-top:6px}
+    footer{margin-top:18px;color:#64748b;font-size:13px}
+    .small{font-size:13px;color:#475569}
+  </style>
 </head>
 <body>
+  <header>
+    <div>
+      <h1>Prepositions Quiz Board</h1>
+      <div class="small">Practice forming full sentences and choosing the correct preposition (on / in / at / etc.). Data loads from a Google Sheet CSV.</div>
+    </div>
 
-<h1>Matching con distractores (SRS)</h1>
+    <div class="controls">
+      <div class="selector">
+        <button class="btn" data-count="10">10</button>
+        <button class="btn" data-count="20">20</button>
+        <button class="btn" data-count="50">50</button>
+      </div>
+      <button id="shuffleBtn" class="btn">Shuffle</button>
+      <button id="reloadBtn" class="btn">Reload</button>
+      <div class="stats" id="stats">Loaded: 0 • Selected: 0 • Correct: 0</div>
+    </div>
+  </header>
 
-<div id="setup">
-  <h2>Configura tus pares</h2>
-  <p><strong>Formato:</strong>  
-  pregunta=respuesta|distractor1|distractor2|distractor3|Texto a mostrar (opcional)</p>
-  <textarea id="pairsInput">Apple=Manzana|Mango|Pera|Sandía|La manzana es una fruta común.
-Dog=Perro|Gato|Lobo|Vaca|El perro es un animal doméstico.
-House=Casa|Puerta|Mesa|Carro|La casa es donde vivimos.</textarea>
-  
-  <button onclick="prepareData()">Comenzar</button>
-  <label for="numTerms">Cantidad de términos:</label>
-  <select id="numTerms">
-    <option value="10">10</option>
-    <option value="20">20</option>
-    <option value="50" selected>50</option>
-  </select>
-</div>
+  <main>
+    <div id="grid" class="grid"></div>
+  </main>
 
-<div class="top-buttons">
-  <button id="helpBtnTop">Casi la recuerdo (filtrar)</button>
-</div>
-
-<div id="infoBoxTop" class="infoBox"></div>
-
-<div class="container" id="game" style="display:none;">
-  <div class="column" id="left"></div>
-  <div class="column" id="right"></div>
-</div>
-
-<div class="bottom-buttons">
-  <button id="helpBtn">Casi la recuerdo (filtrar)</button>
-  <button id="resetBtn" onclick="resetGame()">Reiniciar juego</button>
-  <button id="clearHistoryBtn" onclick="clearSRS()">Reiniciar historial/SRS</button>
-  <button id="backBtn" onclick="goBack()">Volver</button>
-</div>
-
-<div id="infoBox" class="infoBox"></div>
+  <footer>
+    <div>Sheet source: <span id="sheetUrl"></span></div>
+    <div style="margin-top:6px">Progress is stored locally in your browser. To reset, click Reload.</div>
+  </footer>
 
 <script>
-let allPairs = [];
-let pairs = [];
-let selectedQuestion = null;
-let score = {correct:0, wrong:0};
-let helpMode = false;
-let waitingDifficulty = false;
+// Configuration
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTxbOVzYghRBcRrgFSw_QIMx9mYnNaMuGOXWwIefMJjL_BRuWCp2QdlP7IitxTHu7nb-9TW6WH6tZSl/pub?output=csv';
+const STORAGE_KEY = 'prepositions_quiz_progress_' + btoa(CSV_URL).slice(0,12);
 
-function getSRSData(){ return JSON.parse(localStorage.getItem("srsData") || "{}"); }
-function saveSRSData(data){ localStorage.setItem("srsData", JSON.stringify(data)); }
-function clearSRS(){ localStorage.removeItem("srsData"); alert("Historial SRS borrado."); }
+document.getElementById('sheetUrl').textContent = CSV_URL;
 
-function todayISO(){ return new Date().toISOString().slice(0,10); }
-function addDays(dateStr, days){ const d = new Date(dateStr); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); }
-function normalize(str) {
-  return (str || "")
-    .toLowerCase()
-    .normalize("NFD")                      // separa tildes
-    .replace(/[\u0300-\u036f]/g, "")       // quita tildes
-    .replace(/[^\p{L}\p{N} ]+/gu, " ")     // quita todo excepto letras/números/espacio
-    .replace(/\s+/g, " ")                  // convierte múltiples espacios en uno solo
-    .trim();
-}
-
-// UI
-const leftCol = document.getElementById("left");
-const rightCol = document.getElementById("right");
-const helpBtn = document.getElementById("helpBtn");
-const helpBtnTop = document.getElementById("helpBtnTop");
-const backBtn = document.getElementById("backBtn");
-const resetBtn = document.getElementById("resetBtn");
-const clearHistoryBtn = document.getElementById("clearHistoryBtn");
-const infoBox = document.getElementById("infoBox");
-const infoBoxTop = document.getElementById("infoBoxTop");
-
-let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-function ensureAudioContext() { if (audioCtx.state === 'suspended') audioCtx.resume(); }
-function playTone(frequency, duration) { ensureAudioContext(); const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.type = "sine"; o.frequency.value = frequency; g.gain.setValueAtTime(0.2, audioCtx.currentTime); o.start(); o.stop(audioCtx.currentTime + duration);}
-function playCorrectSound() { playTone(600, 0.15); setTimeout(()=>playTone(900, 0.15), 150); }
-function playWrongSound() { playTone(200, 0.2); setTimeout(()=>playTone(100, 0.2), 200); }
-
-function shuffle(array) { return array.sort(() => Math.random() - 0.5); }
-
-function renderRight(options) {
-  rightCol.innerHTML = "";
-  options.forEach(txt => {
-    const div = document.createElement("div");
-    div.className = "item";
-    div.textContent = txt;
-    div.onclick = () => handleRightClick(txt);
-    rightCol.appendChild(div);
-  });
-}
-function render() {
-  leftCol.innerHTML = "";
-  shuffle(pairs).forEach(p => {
-    const div = document.createElement("div");
-    div.className = "item";
-    div.textContent = p.question;
-    if (p.solved) div.classList.add("correct");
-    else div.onclick = () => { selectedQuestion = p; helpMode=false; highlightSelection(); };
-    leftCol.appendChild(div);
-  });
-  let remainingAnswers = pairs.filter(p => !p.solved).map(p => p.answer);
-  renderRight(shuffle([...new Set(remainingAnswers)]));
-}
-function highlightSelection() {
-  document.querySelectorAll("#left .item").forEach(i=>i.classList.remove("selected"));
-  if (selectedQuestion) {
-    document.querySelectorAll("#left .item").forEach(i=>{ if (i.textContent === selectedQuestion.question) i.classList.add("selected"); });
-  }
-}
-
-// --- MEMORIA ---
-// --- MEMORIA ---
-function getActiveMemoryTextarea() {
-  // Busca el textarea que esté visible (display: block)
-  const all = document.querySelectorAll("#infoBox textarea, #infoBoxTop textarea");
-  for (let t of all) {
-    if (t.style.display === "block") return t;
-  }
-  return all[0]; // por defecto el primero
-}
-
-function updateMemoryButtons(active) {
-  document.querySelectorAll(".memory-controls").forEach(mc=>{
-    const btnHide = mc.querySelector("button:nth-child(1)");
-    const btnGiveUp = mc.querySelector("button:nth-child(2)");
-    const txt = mc.querySelector("textarea");
-    const btnCheck = mc.querySelector("button:nth-child(4)");
-    if (active) {
-      btnHide.disabled = true;
-      btnGiveUp.disabled = false;
-      btnCheck.disabled = false;
-    } else {
-      btnHide.disabled = false;
-      btnGiveUp.disabled = true;
-      btnCheck.disabled = true;
+// Utility: CSV parser that handles quoted fields (simple implementation)
+function parseCSV(text){
+  const rows = [];
+  let cur = [];
+  let i = 0; let field = ''; let inQuotes = false;
+  while(i < text.length){
+    const ch = text[i];
+    if(inQuotes){
+      if(ch === '"'){
+        if(text[i+1] === '"'){ field += '"'; i+=2; continue; }
+        inQuotes = false; i++; continue;
+      }
+      field += ch; i++; continue;
     }
-  });
-}
-
-function showInfo(text, id=null) {
-  infoBox.innerHTML = "";
-  infoBoxTop.innerHTML = "";
-  if (text) {
-    infoBox.style.display = "block"; infoBoxTop.style.display = "block";
-    const content = document.createElement("div");
-content.innerHTML = `
-  <div>${text}</div>
-  ${selectedQuestion.ipa ? `<div style="font-size: 0.9em; color: #555; margin-top: 5px;">${selectedQuestion.ipa}</div>` : ""}
-`;
-infoBox.appendChild(content);
-infoBoxTop.appendChild(content.cloneNode(true));
-
-    const controls = document.createElement("div");
-    controls.className = "memory-controls";
-    controls.innerHTML = `
-      <button onclick="startMemoryTest('${id}')">Ocultar y probar memoria</button>
-      <button onclick="giveUp()">Rendirse</button>
-      <textarea id="memoryInput" placeholder="Escribe aquí la oración..."></textarea>
-      <button onclick="checkMemory('${id}')">Comprobar</button>
-    `;
-    infoBox.appendChild(controls); infoBoxTop.appendChild(controls.cloneNode(true));
-    updateMemoryButtons(false);
-    const buttonsDiv = document.createElement("div");
-    buttonsDiv.className = "difficulty-buttons";
-    buttonsDiv.innerHTML = `
-      <button onclick="markDifficulty('${id}', 'easy')">Fácil</button>
-      <button onclick="markDifficulty('${id}', 'hard')">Difícil</button>`;
-    infoBox.appendChild(buttonsDiv); infoBoxTop.appendChild(buttonsDiv.cloneNode(true));
-  } else {
-    infoBox.style.display = "none"; infoBoxTop.style.display = "none";
+    if(ch === '"'){ inQuotes = true; i++; continue; }
+    if(ch === ','){ cur.push(field); field=''; i++; continue; }
+    if(ch === '\r'){ i++; continue; }
+    if(ch === '\n'){ cur.push(field); rows.push(cur); cur=[]; field=''; i++; continue; }
+    field += ch; i++;
   }
+  // last field
+  if(field !== '' || cur.length){ cur.push(field); rows.push(cur); }
+  return rows;
 }
 
-function startMemoryTest(id) {
-  document.querySelectorAll("#infoBox, #infoBoxTop").forEach(box => {
-    box.querySelector("div").style.visibility = "hidden";
-    const textarea = box.querySelector("textarea");
-    textarea.style.display = "block"; textarea.value = "";
-  });
-  updateMemoryButtons(true);
+function shuffleArray(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a}
+
+// Load CSV
+async function loadData(){
+  try{
+    const res = await fetch(CSV_URL);
+    if(!res.ok) throw new Error('CSV fetch failed: ' + res.status);
+    const text = await res.text();
+    const rows = parseCSV(text);
+    // Assume header row exists; map columns by header name (case-insensitive)
+    const header = rows[0].map(h=>h.trim().toLowerCase());
+    const data = rows.slice(1).map(r=>{
+      const obj = {};
+      for(let i=0;i<header.length;i++) obj[header[i]] = (r[i]||'').trim();
+      return obj;
+    }).filter(o => o.situation && o.correctanswer);
+    return data;
+  }catch(err){ console.error(err); alert('Error loading CSV: '+err.message); return []; }
 }
 
-function checkMemory(id) {
-  const textarea = getActiveMemoryTextarea();
-  const userText = normalize(textarea.value);
-  const correctText = normalize(selectedQuestion.info); // usa la oración de la tarjeta
-  if (userText === correctText) {
-    alert("¡Correcto! Ahora marca la dificultad.");
-    document.querySelectorAll("#infoBox, #infoBoxTop").forEach(box=>{
-      const t = box.querySelector("textarea");
-      t.style.display="none";
-      box.querySelector("div").style.visibility="visible";
+// Local storage helpers
+function saveProgress(progress){ localStorage.setItem(STORAGE_KEY, JSON.stringify(progress)); }
+function loadProgress(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'); }catch(e){return{};} }
+
+// Render
+let allData = [], selectedRows = [], progress = loadProgress();
+const gridEl = document.getElementById('grid');
+const statsEl = document.getElementById('stats');
+
+function updateStats(){
+  const correct = Object.values(progress).filter(v=>v.correct).length;
+  statsEl.textContent = `Loaded: ${allData.length} • Selected: ${selectedRows.length} • Correct: ${correct}`;
+}
+
+function makeCard(row, index){
+  const card = document.createElement('div'); card.className='card';
+  card.dataset.index = index;
+
+  const situ = document.createElement('div'); situ.className='situation'; situ.textContent = row.situation || '(no situation)';
+  card.appendChild(situ);
+
+  const controlsRow = document.createElement('div'); controlsRow.className='controls-row';
+
+  const typeBtn = document.createElement('button'); typeBtn.className='btn'; typeBtn.textContent='Type my answer';
+  controlsRow.appendChild(typeBtn);
+
+  const showBtn = document.createElement('button'); showBtn.className='btn'; showBtn.textContent='Show options';
+  controlsRow.appendChild(showBtn);
+
+  card.appendChild(controlsRow);
+
+  const textarea = document.createElement('textarea'); textarea.className='answer'; textarea.placeholder='Write the complete sentence here (optional)'; textarea.style.display='none';
+  card.appendChild(textarea);
+
+  const optionsDiv = document.createElement('div'); optionsDiv.className='options'; optionsDiv.style.display='none';
+  card.appendChild(optionsDiv);
+
+  const feedback = document.createElement('div'); feedback.className='feedback';
+  card.appendChild(feedback);
+
+  // pre-populate options
+  function buildOptions(){
+    optionsDiv.innerHTML='';
+    const candidates = [row.correctanswer, row.distractor1||'', row.distractor2||'', row.distractor3||''].filter(Boolean);
+    const opts = shuffleArray(candidates.slice());
+    opts.forEach(opt=>{
+      const b = document.createElement('button'); b.className='option-btn'; b.textContent = opt; b.dataset.val = opt;
+      b.addEventListener('click', ()=>{
+        // lock buttons
+        Array.from(optionsDiv.querySelectorAll('button')).forEach(btn=>btn.disabled=true);
+        textarea.disabled = true;
+        const isCorrect = opt === row.correctanswer;
+        progress[row._uid] = { chosen: opt, correct: isCorrect, typed: textarea.value || '' };
+        saveProgress(progress);
+        showFeedback(isCorrect, opt, b);
+        updateStats();
+      });
+      optionsDiv.appendChild(b);
     });
-    updateMemoryButtons(false);
-    waitingDifficulty = true;
-  } else {
-    alert("No coincide, intenta otra vez o usa 'Rendirse'.");
   }
-}
 
-function giveUp() {
-  alert("Respuesta correcta:\n" + selectedQuestion.info);
-  document.querySelectorAll("#infoBox, #infoBoxTop").forEach(box=>{
-    const t = box.querySelector("textarea");
-    t.style.display="none";
-    box.querySelector("div").style.visibility="visible";
-  });
-  updateMemoryButtons(false);
-  waitingDifficulty = true;
-}
-
-// --- JUEGO ---
-function markDifficulty(id, level) {
-  // YA NO exigimos prueba de memoria previa
-  const data = getSRSData();
-  if (!data[id]) data[id] = {dueDate: todayISO(), wrongCount:0, interval:1};
-  let d = data[id];
-  if (level === 'hard') {
-    d.wrongCount += 2; d.interval = 1; d.dueDate = todayISO();
-    let card = allPairs.find(c => c.id === id);
-    if (card) { card.solved = false; pairs.push(card); }
-  } else {
-    d.interval = d.interval * 2; d.dueDate = addDays(todayISO(), d.interval);
+  function showFeedback(isCorrect, chosen, clickedBtn){
+    feedback.innerHTML = '';
+    const mark = document.createElement('div'); mark.textContent = isCorrect ? '✅ Correct' : '❌ Incorrect';
+    feedback.appendChild(mark);
+    // highlight buttons
+    Array.from(optionsDiv.querySelectorAll('button')).forEach(btn=>{
+      if(btn.dataset.val === row.correctanswer) btn.classList.add('correct');
+      if(btn.dataset.val === chosen && !isCorrect) btn.classList.add('wrong');
+    });
+    const expl = document.createElement('div'); expl.className='explain';
+    expl.innerHTML = '<strong>Explanation</strong><div>' + (row.explanation||'') + '</div>';
+    feedback.appendChild(expl);
+    if(row.ipa){ const ipa = document.createElement('div'); ipa.className='ipa'; ipa.textContent = 'IPA: ' + row.ipa; feedback.appendChild(ipa); }
   }
-  saveSRSData(data);
-  waitingDifficulty = false;
-  showInfo(""); render();
-}
-function updateSRSOnCorrect(id){ const data = getSRSData(); if (!data[id]) data[id]={dueDate: todayISO(),wrongCount:0,interval:1}; let d=data[id]; d.interval*=2; d.dueDate=addDays(todayISO(),d.interval); saveSRSData(data);}
-function updateSRSOnWrong(id){ const data = getSRSData(); if (!data[id]) data[id]={dueDate: todayISO(),wrongCount:0,interval:1}; let d=data[id]; d.wrongCount++; d.interval=1; d.dueDate=todayISO(); saveSRSData(data);}
 
-function handleRightClick(txt) {
-  if (!selectedQuestion || selectedQuestion.solved) return;
-  const allAnswers = document.querySelectorAll("#right .item");
-  const leftItems = document.querySelectorAll("#left .item");
-  if (txt === selectedQuestion.answer) {
-    playCorrectSound(); score.correct++; selectedQuestion.solved = true; updateSRSOnCorrect(selectedQuestion.id);
-    showInfo(selectedQuestion.info, selectedQuestion.id);
-    leftItems.forEach(li=>{ if (li.textContent === selectedQuestion.question) li.classList.add("correct"); });
-    allAnswers.forEach(a=>{ if (a.textContent === txt) a.classList.add("correct"); });
-    highlightSelection();
-    if (pairs.every(p=>p.solved)) { setTimeout(()=>alert(`¡Completaste todos!\nAciertos: ${score.correct}\nErrores: ${score.wrong}`),100); }
-  } else {
-    playWrongSound(); score.wrong++; updateSRSOnWrong(selectedQuestion.id);
-    allAnswers.forEach(a=>{ if (a.textContent === txt) { a.classList.add("wrong"); setTimeout(()=>a.classList.remove("wrong"),500); }});
+  // wire buttons
+  typeBtn.addEventListener('click', ()=>{ textarea.style.display = textarea.style.display==='none'?'block':'none'; textarea.focus(); });
+  showBtn.addEventListener('click', ()=>{ if(optionsDiv.style.display==='none'){ buildOptions(); optionsDiv.style.display='flex'; } else { optionsDiv.style.display='none'; }});
+
+  // restore progress if any
+  if(progress[row._uid]){
+    textarea.value = progress[row._uid].typed || '';
+    // auto-build and disable
+    buildOptions(); optionsDiv.style.display='flex';
+    Array.from(optionsDiv.querySelectorAll('button')).forEach(b=>b.disabled=true);
+    textarea.disabled = true;
+    showFeedback(progress[row._uid].correct, progress[row._uid].chosen);
   }
+
+  return card;
 }
 
-function handleHelpClick() {
-  if (!selectedQuestion) { alert("Primero selecciona un término de la columna izquierda"); return; }
-  helpMode = true;
-  const correct = selectedQuestion.answer;
-  const wrongs = shuffle(selectedQuestion.distractors.filter(x=>x));
-  renderRight(shuffle([correct, ...wrongs.slice(0,2)]));
+// prepare rows with unique ids
+function prepareData(raw){
+  return raw.map((r,idx)=>({...r, _uid: r.correctanswer + '||' + idx}));
 }
-helpBtn.onclick = handleHelpClick; helpBtnTop.onclick = handleHelpClick;
 
-function prepareData(){
-  const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTxbOVzYghRBcRrgFSw_QIMx9mYnNaMuGOXWwIefMJjL_BRuWCp2QdlP7IitxTHu7nb-9TW6WH6tZSl/pub?output=csv";
-  fetch(sheetUrl)
-    .then(res => res.text())
-    .then(csvText => {
-      const parsed = Papa.parse(csvText, { header: true });
-      const srs = getSRSData(); const today = todayISO();
-      let rows = parsed.data.map(row => ({
-        id: row["ID"], question: row["Pregunta"]?.trim(), answer: row["Respuesta"]?.trim(),
-        distractors: [row["Distractor 1"]?.trim(), row["Distractor 2"]?.trim(), row["Distractor 3"]?.trim()],
-        info: row["Info"]?.trim(), ipa: row["IPA"]?.trim() || "", solved: false
-      })).filter(p => p.question && p.answer);
-      let due=0,future=0;
-      rows.forEach(r=>{let info = srs[r.id]; if (!info || info.dueDate <= today) due++; else future++;});
-      if (!confirm(`Total tarjetas: ${rows.length}\nDisponibles hoy: ${due}\nProgramadas: ${future}\n¿Continuar?`)) return;
-      let candidates = rows.filter(r=>{const d=srs[r.id];return !d||d.dueDate<=today;});
-      candidates.sort((a,b)=>{let sa=srs[a.id]?.wrongCount||0;let sb=srs[b.id]?.wrongCount||0;return sb-sa;});
-      const numTerms=parseInt(document.getElementById("numTerms").value,10);
-      let top=Math.ceil(numTerms*0.4); let middle=Math.ceil(numTerms*0.3); let rest=numTerms-top-middle;
-      const hard=shuffle(candidates.slice(0,30)).slice(0,top);
-      const midStart=Math.floor(candidates.length/3);
-      const middleBlock=shuffle(candidates.slice(midStart,midStart+30)).slice(0,middle);
-      const endBlock=shuffle(candidates.slice(-30)).slice(0,rest);
-      allPairs=shuffle([...hard,...middleBlock,...endBlock]);
-      if (allPairs.length===0){ alert("No hay tarjetas para hoy"); return; }
-      pairs=JSON.parse(JSON.stringify(allPairs)); score={correct:0,wrong:0}; helpMode=false; showInfo("");
-      document.getElementById("setup").style.display="none"; document.getElementById("game").style.display="flex";
-      helpBtn.style.display="inline-block"; helpBtnTop.style.display="inline-block"; backBtn.style.display="inline-block";
-      resetBtn.style.display="inline-block"; clearHistoryBtn.style.display="inline-block";
-      render();
-    })
-    .catch(err => alert("Error al cargar los datos: " + err));
+function renderBoard(count){
+  gridEl.innerHTML='';
+  if(allData.length===0) return;
+  // select random subset
+  const pool = shuffleArray(allData.slice());
+  selectedRows = pool.slice(0, Math.min(count, pool.length));
+  selectedRows.forEach((row, i)=> gridEl.appendChild(makeCard(row, i)));
+  updateStats();
 }
-function resetGame(){ pairs=JSON.parse(JSON.stringify(allPairs)); score={correct:0,wrong:0}; helpMode=false; showInfo(""); render();}
-function goBack(){ document.getElementById("setup").style.display="block"; document.getElementById("game").style.display="none"; helpBtn.style.display="none"; helpBtnTop.style.display="none"; backBtn.style.display="none"; resetBtn.style.display="none"; clearHistoryBtn.style.display="none"; showInfo(""); }
+
+// initial load
+(async function init(){
+  allData = prepareData(await loadData());
+  updateStats();
+  // default load 10 or less
+  const defaultCount = Math.min(10, allData.length);
+  renderBoard(defaultCount);
+})();
+
+// controls
+document.querySelectorAll('[data-count]').forEach(btn=>btn.addEventListener('click', ()=>{
+  const n = parseInt(btn.dataset.count,10);
+  renderBoard(n);
+}));
+
+document.getElementById('shuffleBtn').addEventListener('click', ()=>{
+  renderBoard(selectedRows.length || 10);
+});
+
+document.getElementById('reloadBtn').addEventListener('click', async ()=>{
+  if(confirm('Reload data from sheet and reset progress?')){
+    localStorage.removeItem(STORAGE_KEY);
+    progress = {};
+    allData = prepareData(await loadData());
+    renderBoard(Math.min(10, allData.length));
+  }
+});
+
 </script>
-
 </body>
 </html>
